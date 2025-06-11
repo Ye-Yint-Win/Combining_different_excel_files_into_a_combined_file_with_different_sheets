@@ -1,0 +1,89 @@
+---
+title: "Project Combining Worksheet"
+author: "Ye"
+date: "2025-06-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(openxlsx)
+library(readxl)
+library(lubridate)
+library(writexl)
+```
+
+
+Getting to file paths and Creating Workbook
+```{r}
+#Define File Paths
+input_folder <- "to-your-file-path/xlsx" # which you downloaded to get an example of the code
+output_file <- "combined_indiv.xlsx"
+
+#Get list of .xlsx files
+file_paths <- list.files(input_folder, pattern = "\\.xlsx$", full.names = TRUE)
+
+#Get only the file names from that path
+base_names <- basename(file_paths)
+
+#Create a new Workbook
+wb <- createWorkbook()
+
+```
+
+```{r}
+#Creating Excel short date format style (e.g., MM/DD/YY)
+date_style <- createStyle(numFmt = "mm/dd/yy")
+
+# Loop through each file
+for (i in seq_along(file_paths)) {
+  file <- file_paths[i]
+  base_name <- base_names[i]
+  
+  df <- read_excel(file, col_names = TRUE)
+
+  # Convert MP column from Excel time to integer hours
+  # NBARef files have Minutes played files as something strange
+  # Like 40 minutes is 40:00:00, which is in the format 1/1/1900  4:00:00 PM
+  if ("MP" %in% names(df)) {
+    df$MP <- as.numeric(df$MP)
+    df$MP <- floor(df$MP * 24)
+  }
+
+  # Generate a safe, unique sheet name
+  sheet_base <- substr(base_name, 1, 7)
+  suffix <- gsub(".*_(reg|post)\\.xlsx$", "_\\1", base_name)#REGEX
+  
+  #making sure to get reg or post as substr(3 for reg, 4 for post)
+  sheet_name <- paste0(sheet_base, suffix)
+  sheet_name <- substr(sheet_name, 1, 31)
+
+  #Check Duplicates
+  if (sheet_name %in% names(wb)) {
+    sheet_name <- paste0(sheet_name, "_", i)
+    sheet_name <- substr(sheet_name, 1, 31)
+  }
+
+  #Add sheet and write data
+  addWorksheet(wb, sheetName = sheet_name)
+  writeData(wb, sheet = sheet_name, x = df)
+
+  #Format the 'Date' column
+  if ("Date" %in% names(df)) {
+    date_col_index <- which(names(df) == "Date")
+    addStyle(
+      wb, sheet = sheet_name,
+      style = date_style,
+      cols = date_col_index,
+      rows = 2:(nrow(df) + 1),  #skip header row
+      gridExpand = TRUE
+    )
+  }
+}
+
+# Save the workbook
+saveWorkbook(wb, file = output_file, overwrite = TRUE)
+
+cat("✅ All sheets written to:", output_file, "\n")
+```
+
